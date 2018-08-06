@@ -86,6 +86,7 @@
 
 #include "master/flags.hpp"
 #include "master/master.hpp"
+#include "master/resources/network_bandwidth.hpp"
 #include "master/weights.hpp"
 
 #include "module/manager.hpp"
@@ -4065,6 +4066,10 @@ void Master::accept(
     }
   }
 
+  CHECK_SOME(slaveId);
+  Slave* slave = slaves.registered.get(slaveId.get());
+  CHECK_NOTNULL(slave);
+
   // We make various adjustments to the `Offer::Operation`s,
   // typically for backward/forward compatibility.
   // TODO(mpark): Pull this out to a master normalization utility.
@@ -4118,6 +4123,11 @@ void Master::accept(
               task.mutable_health_check()->set_type(HealthCheck::HTTP);
             }
           }
+          Try<Nothing> result = resources::enforceNetworkBandwidthAllocation(
+            slave->totalResources, task);
+          if(result.isError()) {
+            LOG(WARNING) << result.error();
+          }
         }
 
         break;
@@ -4135,6 +4145,11 @@ void Master::accept(
           if (!task.has_executor()) {
             task.mutable_executor()->CopyFrom(executor);
           }
+          Try<Nothing> result = resources::enforceNetworkBandwidthAllocation(
+            slave->totalResources, task);
+          if(result.isError()) {
+            LOG(WARNING) << result.error();
+          }
         }
 
         break;
@@ -4145,10 +4160,6 @@ void Master::accept(
       }
     }
   }
-
-  CHECK_SOME(slaveId);
-  Slave* slave = slaves.registered.get(slaveId.get());
-  CHECK_NOTNULL(slave);
 
   LOG(INFO) << "Processing ACCEPT call for offers: " << accept.offer_ids()
             << " on agent " << *slave << " for framework " << *framework;
